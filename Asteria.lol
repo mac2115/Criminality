@@ -228,19 +228,20 @@ function setupsilent(old,caller)
 end
 
 --misc functions
+
+
 function lockpick()
 	for i, v in getgc() do
-		if type(v) == "function" and debug.info(v, "n") == "Complete" and debug.info(v, "l") == 329 then
+		if type(v) == "function" and debug.info(v, "n") == "Complete" then
 			return v
 		end
 	end
 end
 
+
 function instantlockpick()
-	local lockpicks = lockpick() -- this shit was mad easy and funny
-	if lockpicks ~= nil then
-		lockpicks()
-	end
+	local compl = lockpick()
+	compl()
 end
 
 function jumpheight()
@@ -449,7 +450,7 @@ Tabs.Misc:AddButton({
 	Title = "Instant complete lockpick",
 	Description = "Instantly completes lockpick",
 	Callback = function()
-		lockpick()
+		instantlockpick()
 	end,
 })
 
@@ -721,7 +722,6 @@ end)
 task.spawn(function()
 	plr.Character.ChildAdded:Connect(function()
 		setupsilent()
-		norecoil()
 	end)
 end)
 

@@ -1,7 +1,7 @@
 repeat
 	task.wait()
 until game:IsLoaded()
---hey skid dont skid pls pls pls pls :DDDDDDD
+--hey skid dont skid pls pls pls pls :DDDDDDDD
 do
 	local function isAdonisAC(table)
 		return rawget(table, "Detected")

@@ -706,8 +706,8 @@ SaveManager:BuildConfigSection(Tabs.Settings)
 Window:SelectTab(1)
 
 Fluent:Notify({
-	Title = "Criminality",
-	Content = "The script has been loaded.",
+	Title = "Asteria.lol/Criminality",
+	Content = "The script has been loaded(join our discord)",
 	Duration = 5,
 })
 

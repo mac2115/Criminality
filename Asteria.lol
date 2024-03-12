@@ -138,8 +138,9 @@ function checkifvisible(target) --visibility check to fix ig
 	end
 end
 
-local yes = getshoot()
+
 function norecoil()
+	local yes = getshoot()
 	if getgenv().Settings.Nospread then
 		if yes ~= nil then
 			local camerashake = getupvalues(getupvalues(yes)[17])[17]
@@ -187,27 +188,16 @@ function getenemy()
 	return target
 end
 
-function setupsilent()
-	local old
-	local caller
+function setupsilent(old,caller)
+	local yes = getshoot()
 	if getgenv().Settings.SilentAim.Toggle then
 		if yes ~= nil then
 			caller = getupvalues(yes)[34] --could find a better method testing now dont ask im autistic this is dumb code dont learn from it LOLLLLLLLL L ME
-			print(caller)
+			if caller == nil then
+				yes = getshoot()
+				caller = getupvalues(yes)[34]
+			end
 			if not isfunctionhooked(caller) then
-				restorefunction(caller)
-				old = hookfunction(caller, function(self, ...)
-					local target = getenemy()
-					if target ~= nil then
-						print(target.Name)
-						return target[getgenv().Settings.SilentAim.Bone].Position
-					else
-						print("did not find target sadly unlucky: 0x0")
-						return old(self, ...)
-					end
-				end)
-			else
-				restorefunction(caller)
 				old = hookfunction(caller, function(self, ...)
 					local target = getenemy()
 					if target ~= nil then
@@ -223,8 +213,13 @@ function setupsilent()
 			print("no yes func so getting it again")
 		end
 	else
+		yes = getshoot()
 		if yes ~= nil then
 			caller = getupvalues(yes)[34]
+			if caller == nil then
+				yes = getshoot()
+				caller = getupvalues(yes)[34]
+			end
 			if isfunctionhooked(caller) then
 				restorefunction(caller)
 			end

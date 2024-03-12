@@ -2,26 +2,22 @@ repeat
 	task.wait()
 until game:IsLoaded()
 --hey skid dont skid pls pls pls pls :DDDDDDD
+--open adonis bypass btw not mine but yeah its here ^^^^
 do
 	local function isAdonisAC(table)
 		return rawget(table, "Detected")
 			and typeof(rawget(table, "Detected")) == "function"
 			and rawget(table, "RLocked")
 	end
-
 	for _, v in next, getgc(true) do
 		if typeof(v) == "table" and isAdonisAC(v) then
-			-- warn(warn, "founded")
 			for i, v in next, v do
 				if rawequal(i, "Detected") then
-					-- warn(warn, "^^^^^^^")
 					local old
 					old = hookfunction(v, function(action, info, nocrash)
 						if rawequal(action, "_") and rawequal(info, "_") and rawequal(nocrash, true) then
-							-- warn("checkup")
 							return old(action, info, nocrash)
 						end
-						-- warn(warn, "detected for :", action, info, nocrash)
 						return task.wait(9e9)
 					end)
 					warn("bypassed")
@@ -198,22 +194,30 @@ function setupsilent()
 		if yes ~= nil then
 			caller = getupvalues(yes)[34] --could find a better method testing now dont ask im autistic this is dumb code dont learn from it LOLLLLLLLL L ME
 			print(caller)
-			if not isfunctionhooked(caller)  then
-				old = hookfunction(
-					caller,
-					newcclosure(function(self, ...)
-						local target = getenemy()
-						if target ~= nil then
-							print(target.Name)
-							return target[getgenv().Settings.SilentAim.Bone].Position
-						else
-							print("did not find target sadly unlucky: 0x0")
-							return old(self, ...)
-						end
-					end)
-				)
+			if not isfunctionhooked(caller) then
+				restorefunction(caller)
+				old = hookfunction(caller, function(self, ...)
+					local target = getenemy()
+					if target ~= nil then
+						print(target.Name)
+						return target[getgenv().Settings.SilentAim.Bone].Position
+					else
+						print("did not find target sadly unlucky: 0x0")
+						return old(self, ...)
+					end
+				end)
 			else
 				restorefunction(caller)
+				old = hookfunction(caller, function(self, ...)
+					local target = getenemy()
+					if target ~= nil then
+						print(target.Name)
+						return target[getgenv().Settings.SilentAim.Bone].Position
+					else
+						print("did not find target sadly unlucky: 0x0")
+						return old(self, ...)
+					end
+				end)
 			end
 		else
 			print("no yes func so getting it again")

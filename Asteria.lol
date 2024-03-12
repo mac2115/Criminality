@@ -1,7 +1,7 @@
 repeat
 	task.wait()
 until game:IsLoaded()
---hey skid dont skid pls pls pls pls :DDDDDDDD
+--hey skid dont skid pls pls pls pls :DDDDDDD
 do
 	local function isAdonisAC(table)
 		return rawget(table, "Detected")
@@ -61,14 +61,14 @@ getgenv().Settings = {
 	SilentAim = { Toggle = false, Bone = "Head", Fov = 180 },
 	Speed = 0.22,
 	Jump = false,
-	JumpHeight = 15,	
+	JumpHeight = 15,
 	InfStamina = false,
 	Nocombat = false,
 	Noclip = false,
 	Fovchanger = { Toggle = false, fov = 111 },
 	Nospread = false,
 	Instantlock = false,
-	Spinbot = {Toggle = false, speed = 50} -- didnt add yet btw
+	Spinbot = { Toggle = false, speed = 50 }, -- didnt add yet btw
 }
 
 --bypasses
@@ -198,32 +198,22 @@ function setupsilent()
 		if yes ~= nil then
 			caller = getupvalues(yes)[34] --could find a better method testing now dont ask im autistic this is dumb code dont learn from it LOLLLLLLLL L ME
 			print(caller)
-			if isfunctionhooked(caller) == false then
-				restorefunction(caller)
-				old = hookfunction(caller, function(self, ...)
-					local target = getenemy()
-					if target ~= nil then
-						print(target.Name)
-						return target[getgenv().Settings.SilentAim.Bone].Position
-					else
-						print("did not find target sadly unlucky: 0x0")
-						return old(self, ...)
-					end
-				end)
+			if not isfunctionhooked(caller)  then
+				old = hookfunction(
+					caller,
+					newcclosure(function(self, ...)
+						local target = getenemy()
+						if target ~= nil then
+							print(target.Name)
+							return target[getgenv().Settings.SilentAim.Bone].Position
+						else
+							print("did not find target sadly unlucky: 0x0")
+							return old(self, ...)
+						end
+					end)
+				)
 			else
-				print("already hooked")
 				restorefunction(caller)
-				old = hookfunction(caller, function(self, ...)
-					local target = getenemy()
-					if target ~= nil then
-						print(target.Name)
-						return target[getgenv().Settings.SilentAim.Bone].Position
-					else
-						print("did not find target sadly unlucky: 0x0")
-						return old(self, ...)
-					end
-				end)
-				print(caller())
 			end
 		else
 			print("no yes func so getting it again")
@@ -294,7 +284,6 @@ function fovchanger()
 end
 
 --funny stuff lol
-
 
 --speeed
 _G.speed = 0.22
@@ -381,8 +370,8 @@ end)
 Options.Silentaim:SetValue(false)
 
 local Dropdown = Tabs.Main:AddDropdown("AimBone", {
-	Title = "Dropdown",
-	Values = {"Head",'Torso','Left Arm','Right Arm','Left Leg','Right Leg'},
+	Title = "AimBone",
+	Values = { "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" },
 	Multi = false,
 	Default = 1,
 })
@@ -392,8 +381,6 @@ Dropdown:SetValue("Head")
 Dropdown:OnChanged(function(Value)
 	getgenv().Settings.SilentAim.Bone = Value
 end)
-
-
 
 local Toggle = Tabs.Main:AddToggle("nospr", { Title = "Nospread Toggle", Default = false })
 
@@ -693,7 +680,7 @@ Tabs.Settings:AddButton({
 	Title = "Copy discord invite",
 	Description = "Copies the invite to the asteria.lol discord",
 	Callback = function()
-		setclipboard('discord.gg/t2cXFpkGBh')
+		setclipboard("discord.gg/t2cXFpkGBh")
 	end,
 })
 

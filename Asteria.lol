@@ -138,7 +138,6 @@ function checkifvisible(target) --visibility check to fix ig
 	end
 end
 
-
 function norecoil()
 	local yes = getshoot()
 	if getgenv().Settings.Nospread then
@@ -188,7 +187,7 @@ function getenemy()
 	return target
 end
 
-function setupsilent(old,caller)
+function setupsilent(old, caller)
 	local yes = getshoot()
 	if getgenv().Settings.SilentAim.Toggle then
 		if yes ~= nil then
@@ -229,7 +228,6 @@ end
 
 --misc functions
 
-
 function lockpick()
 	for i, v in getgc() do
 		if type(v) == "function" and debug.info(v, "n") == "Complete" then
@@ -238,10 +236,16 @@ function lockpick()
 	end
 end
 
-
 function instantlockpick()
-	local compl = lockpick()
-	compl()
+	if getgenv().Settings.Instantlock then
+		if plr.PlayerGui:FindFirstChild("LockpickGUI") then
+			task.wait(0.15)
+			local compl = lockpick()
+			if compl then
+				compl()
+			end
+		end
+	end
 end
 
 function jumpheight()
@@ -446,13 +450,13 @@ local Slider = Tabs.Misc:AddSlider("Slider", {
 	end,
 })
 
-Tabs.Misc:AddButton({
-	Title = "Instant complete lockpick",
-	Description = "Instantly completes lockpick",
-	Callback = function()
-		instantlockpick()
-	end,
-})
+local Toggle = Tabs.Misc:AddToggle("lock", { Title = "Instant lockpick Toggle", Default = false })
+
+Toggle:OnChanged(function()
+	getgenv().Settings.Instantlock = Options.lock.Value
+end)
+
+Options.lock:SetValue(false)
 
 Tabs.Misc:AddButton({
 	Title = "Chatlogger",
@@ -716,6 +720,14 @@ task.spawn(function()
 	RunService.RenderStepped:Connect(function()
 		jumpheight()
 		fovchanger()
+	end)
+end)
+
+task.spawn(function()
+	plr.PlayerGui.ChildAdded:Connect(function(child)
+		if child.Name == "LockpickGUI" then
+			instantlockpick()
+		end
 	end)
 end)
 

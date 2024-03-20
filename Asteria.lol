@@ -9,14 +9,15 @@ do
 			and typeof(rawget(table, "Detected")) == "function"
 			and rawget(table, "RLocked")
 	end
+
 	for _, v in next, getgc(true) do
 		if typeof(v) == "table" and isAdonisAC(v) then
 			for i, v in next, v do
 				if rawequal(i, "Detected") then
 					local old
-					old = hookfunction(v, function(action, info, nocrash)
-						if rawequal(action, "_") and rawequal(info, "_") and rawequal(nocrash, true) then
-							return old(action, info, nocrash)
+					old = hookfunction(v, function(action, info, crash)
+						if rawequal(action, "_") and rawequal(info, "_") and rawequal(crash, false) then
+							return old(action, info, crash)
 						end
 						return task.wait(9e9)
 					end)
@@ -56,6 +57,7 @@ local UIS = game:GetService("UserInputService")
 getgenv().Settings = {
 	SilentAim = { Toggle = false, Bone = "Head", Fov = 180 },
 	Speed = 0.22,
+	Spedtog = false,
 	Jump = false,
 	JumpHeight = 15,
 	InfStamina = false,
@@ -64,9 +66,14 @@ getgenv().Settings = {
 	Fovchanger = { Toggle = false, fov = 111 },
 	Nospread = false,
 	Instantlock = false,
-	Spinbot = { Toggle = false, speed = 50 }, -- didnt add yet btw
+	Spinbot = { Toggle = false, speed = 50 },
+	Sound = true,
+	Soundid = "rbxassetid://4817809188",
+	Prediction = true,
+	InstantPickup = true, --- did not implement hit sound yet
 }
 
+---rbxassetid://8323804973 -- moan
 --bypasses
 local getupvalues = clonef(debug.getupvalues)
 local getconstants = clonef(debug.getconstants)
@@ -104,9 +111,6 @@ function nocombat()
 	end
 end
 --esp
-local esp = loadstring(game:HttpGet("https://raw.githubusercontent.com/mac2115/dsadassda/main/s", true))()
-
-esp:Load()
 
 --silent aim functions yes yes
 function getshoot()
@@ -124,48 +128,76 @@ function getshoot()
 	end
 end
 
-function checkifvisible(target) --visibility check to fix ig
-	local ray =
-		Ray.new(plr.Character.Head.Position, (target.Character.Head.Position - plr.Character.Head.Position).Unit * 300)
-	local part, position = Workspace:FindPartOnRayWithIgnoreList(ray, { plr.Character }, false, true)
-	if part then
-		if target.Character.Humanoid.Health > 0 then
-			local pos, visible = camera:WorldToScreenPoint(target.Character.HumanoidRootPart.Position)
-			if visible then
+
+	
+function norecoil()
+	task.spawn(function()
+		local yes = getshoot()
+		if getgenv().Settings.Nospread then
+			if yes ~= nil then
+				local camerashake = getupvalues(getupvalues(yes)[17])[17]
+				if isfunctionhooked(camerashake) == false then
+					hookfunction(camerashake, function()
+						return 0
+					end)
+				end
+			else
+				yes = getshoot()
+			end
+		else
+			if yes ~= nil then
+				local camerashake = getupvalues(getupvalues(yes)[17])[17]
+				if isfunctionhooked(camerashake) then
+					restorefunction(camerashake)
+				end
+			else
+				yes = getshoot()
+			end
+		end
+	end)
+end
+
+function checkifvisible(target)
+	if plr and target and plr.Character and target.Character then
+		local playerRoot = plr.Character:FindFirstChild("HumanoidRootPart")
+		local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+		if playerRoot and targetRoot then
+			local direction = (targetRoot.Position - playerRoot.Position).unit
+			local ray = Ray.new(playerRoot.Position, direction * (targetRoot.Position - playerRoot.Position).magnitude)
+			local part, position = workspace:FindPartOnRayWithIgnoreList(ray, { plr.Character })
+			if part and part:IsDescendantOf(target.Character) then
+				print("yay")
 				return true
 			end
 		end
 	end
+	return false
 end
 
-function norecoil()
-	local yes = getshoot()
-	if getgenv().Settings.Nospread then
-		if yes ~= nil then
-			local camerashake = getupvalues(getupvalues(yes)[17])[17]
-			if isfunctionhooked(camerashake) == false then
-				hookfunction(camerashake, function()
-					return 0
-				end)
-			end
-		else
-			yes = getshoot()
-		end
-	else
-		if yes ~= nil then
-			local camerashake = getupvalues(getupvalues(yes)[17])[17]
-			if isfunctionhooked(camerashake) then
-				restorefunction(camerashake)
-			end
-		else
-			yes = getshoot()
-		end
+local sounds = {}
+sounds["Skeet"] = "rbxassetid://4817809188"
+sounds["uwu"] = "rbxassetid://8323804973"
+sounds["stone"] = "rbxassetid://3581383408"
+sounds["tf2"] = "rbxassetid://8255306220"
+
+function playSound()
+	if not getgenv().Settings.Sound then
+		return
+	end
+	if plr.Character then
+		local sound = Instance.new("Sound")
+		sound.SoundId = getgenv().Settings.Soundid
+		sound.Parent = plr.Character.HumanoidRootPart
+		sound:Play()
+		sound.Ended:Connect(function()
+			sound:Destroy()
+		end)
 	end
 end
 
 function getenemy()
 	local target = nil
-	local maxDist = getgenv().Settings.SilentAim.Fov
+	local maxDist = getgenv().Settings.SilentAim.Fov * 5
 	for i, v in pairs(Players:GetPlayers()) do
 		if v.Character then
 			if
@@ -177,9 +209,10 @@ function getenemy()
 				local dist = (Vector2.new(mouse.X, mouse.Y) - Vector2.new(pos.X, pos.Y)).magnitude
 				if dist < maxDist and vis then
 					if checkifvisible(v) then
+						playSound()
 						target = v.Character
+						maxDist = dist
 					end
-					maxDist = dist
 				end
 			end
 		end
@@ -187,35 +220,48 @@ function getenemy()
 	return target
 end
 
+function predict(obj)
+	if getgenv().Settings.Prediction then
+		local dt = RunService.RenderStepped:Wait()
+		local gravity = Vector3.new(0, -Workspace.Gravity, 0)
+		local acceleration = gravity / obj:GetMass()
+		local predictedPosition = obj.Position + obj.AssemblyLinearVelocity * dt
+		predictedPosition = predictedPosition + 0.5 * acceleration * dt * dt
+		return predictedPosition
+	else
+		return obj.Position
+	end
+end
+
 function setupsilent(old, caller)
 	local yes = getshoot()
 	if getgenv().Settings.SilentAim.Toggle then
-		if yes ~= nil then
-			caller = getupvalues(yes)[34] --could find a better method testing now dont ask im autistic this is dumb code dont learn from it LOLLLLLLLL L ME
-			if caller == nil then
+		if yes then
+			caller = getupvalues(yes)[34]
+			if not caller then
 				yes = getshoot()
 				caller = getupvalues(yes)[34]
 			end
 			if not isfunctionhooked(caller) then
 				old = hookfunction(caller, function(self, ...)
 					local target = getenemy()
-					if target ~= nil then
-						print(target.Name)
-						return target[getgenv().Settings.SilentAim.Bone].Position
+					if target then
+						print("Target found: " .. target.Name)
+						playSound()
+						return predict(target[getgenv().Settings.SilentAim.Bone])
 					else
-						print("did not find target sadly unlucky: 0x0")
+						print("No target found.")
 						return old(self, ...)
 					end
 				end)
 			end
 		else
-			print("no yes func so getting it again")
+			print("No 'yes' function found.")
 		end
 	else
-		yes = getshoot()
-		if yes ~= nil then
+		if yes then
 			caller = getupvalues(yes)[34]
-			if caller == nil then
+			if not caller then
 				yes = getshoot()
 				caller = getupvalues(yes)[34]
 			end
@@ -227,7 +273,6 @@ function setupsilent(old, caller)
 end
 
 --misc functions
-
 function lockpick()
 	for i, v in getgc() do
 		if type(v) == "function" and debug.info(v, "n") == "Complete" then
@@ -287,12 +332,16 @@ function fovchanger()
 	end
 end
 
---funny stuff lol
+--fov circle
+local circle = Drawing.new("Circle")
+circle.Color = Color3.fromRGB(224, 224, 224)
+circle.Filled = false
+circle.Position = Vector2.new(mouse.X, mouse.Y)
+circle.Transparency = 0.7
+circle.Visible = false
 
 --speeed
-_G.speed = 0.22
-
-local movementVector = { 0, 0 }
+_G.speed = 0.01
 
 getgenv().Control = {
 	left = 0,
@@ -301,26 +350,26 @@ getgenv().Control = {
 	forward = 0,
 }
 
-game:GetService("UserInputService").InputBegan:Connect(function(k, gameProcessedEvent)
+UIS.InputBegan:Connect(function(k, gameProcessedEvent)
 	if not gameProcessedEvent then
 		if k.KeyCode == Enum.KeyCode.W then
 			getgenv().Control.forward = _G.speed
 		elseif k.KeyCode == Enum.KeyCode.S then
-			getgenv().Control.back = _G.speed
+			getgenv().Control.back = -_G.speed
 		elseif k.KeyCode == Enum.KeyCode.A then
-			getgenv().Control.left = _G.speed
+			getgenv().Control.left = -_G.speed
 		elseif k.KeyCode == Enum.KeyCode.D then
 			getgenv().Control.right = _G.speed
 		end
 	end
 end)
 
-game:GetService("UserInputService").InputEnded:Connect(function(k, gameProcessedEvent)
+UIS.InputEnded:Connect(function(k, gameProcessedEvent)
 	if not gameProcessedEvent then
 		if k.KeyCode == Enum.KeyCode.W then
-			getgenv().Control.forward -= 0
+			getgenv().Control.forward = 0
 		elseif k.KeyCode == Enum.KeyCode.S then
-			getgenv().Control.backward = 0
+			getgenv().Control.back = 0
 		elseif k.KeyCode == Enum.KeyCode.A then
 			getgenv().Control.left = 0
 		elseif k.KeyCode == Enum.KeyCode.D then
@@ -337,391 +386,590 @@ function getvector()
 	)
 end
 
---loops and uis so it works coolie coolie doolie woolie foolie
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager =
-	loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(
-	game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua")
-)()
+--pickup stuff
 
-local Window = Fluent:CreateWindow({
-	Title = "Asteria.lol Criminality v1.0.0",
-	SubTitle = "by mac0014",
-	TabWidth = 160,
-	Size = UDim2.fromOffset(580, 460),
-	Acrylic = true, -- The blur may be detectable, setting this to false disables blur entirely
-	Theme = "Dark",
-	MinimizeKey = Enum.KeyCode.Insert, -- Used when theres no MinimizeKeybind
+local esp = loadstring(game:HttpGet("https://raw.githubusercontent.com/mac2115/dsadassda/main/s", true))()
+esp.options.names = false
+esp.options.enabled = false
+esp.options.fontSize = 13
+esp.options.outOfViewArrowsFilled = false
+esp.options.boxes = false
+esp.options.boxFill = false
+esp.options.healthBars = false
+esp.options.distance = false
+esp.options.healthText = false
+esp:Load()
+
+--shit stuff
+local repo = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/"
+
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+local Window = Library:CreateWindow({
+
+	Title = "Asteria.lol v1.0.3",
+	Center = true,
+	AutoShow = true,
+	TabPadding = 8,
+	MenuFadeTime = 0.2,
 })
 
---Fluent provides Lucide Icons https://lucide.dev/icons/ for the tabs, icons are optional
 local Tabs = {
-	Main = Window:AddTab({ Title = "Main", Icon = "crosshair" }),
-	Misc = Window:AddTab({ Title = "Misc", Icon = "info" }),
-	Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
-	Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
+	Main = Window:AddTab("Main"),
+	Visuals = Window:AddTab("Visuals"),
+	Misc = Window:AddTab("Misc"),
+	["UI Settings"] = Window:AddTab("UI Settings"),
 }
 
-local Options = Fluent.Options
-local Toggle = Tabs.Main:AddToggle("Silentaim", { Title = "Silent Aim Toggle", Default = false })
+local LeftGroupBox = Tabs.Main:AddLeftGroupbox("Main")
 
-Toggle:OnChanged(function()
-	getgenv().Settings.SilentAim.Toggle = Options.Silentaim.Value
-	setupsilent()
-end)
+LeftGroupBox:AddToggle("Aimbot", {
+	Text = "Silent aim toggle ",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
 
-Options.Silentaim:SetValue(false)
-
-local Dropdown = Tabs.Main:AddDropdown("AimBone", {
-	Title = "AimBone",
-	Values = { "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" },
-	Multi = false,
-	Default = 1,
+	Callback = function(Value)
+		getgenv().Settings.SilentAim.Toggle = Value
+		setupsilent()
+	end,
 })
 
-Dropdown:SetValue("Head")
+LeftGroupBox:AddToggle("Spread", {
+	Text = "No spread toggle ",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
 
-Dropdown:OnChanged(function(Value)
-	getgenv().Settings.SilentAim.Bone = Value
-end)
+	Callback = function(Value)
+		getgenv().Settings.Nospread = Value
+		norecoil()
+	end,
+})
 
-local Toggle = Tabs.Main:AddToggle("nospr", { Title = "Nospread Toggle", Default = false })
+LeftGroupBox:AddDropdown("MyDropdown", {
+	Values = { "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" },
+	Default = 1, -- number index of the value / string
+	Multi = false, -- true / false, allows multiple choices to be selected
 
-Toggle:OnChanged(function()
-	getgenv().Settings.Nospread = Options.nospr.Value
-	norecoil()
-end)
+	Text = "Aim bone",
+	Tooltip = "Determines which bone should aimbot aim at", -- Information shown when you hover over the dropdown
+	Callback = function(Value)
+		getgenv().Settings.SilentAim.Bone = Value
+	end,
+})
 
-Options.nospr:SetValue(false)
+Options.MyDropdown:SetValue("Head")
 
-local Toggle = Tabs.Main:AddToggle("Jump", { Title = "High jump Toggle", Default = false })
-
-Toggle:OnChanged(function()
-	getgenv().Settings.Jump = Options.Jump.Value
-end)
-
-Options.Jump:SetValue(false)
-
-local Slider = Tabs.Main:AddSlider("Slider", {
-	Title = "Jump height ",
-	Description = "",
-	Default = 15,
-	Min = 0,
-	Max = 50,
+LeftGroupBox:AddSlider("Fovaim", {
+	Text = "Aimbot fov",
+	Default = 180,
+	Min = 1,
+	Max = 360,
 	Rounding = 0,
+	Compact = false,
+
+	Callback = function(Value)
+		getgenv().Settings.SilentAim.Fov = Value
+	end,
+})
+
+LeftGroupBox:AddToggle("Circle", {
+	Text = "Fov circle toggle ",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		circle.Visible = Value
+	end,
+})
+
+LeftGroupBox:AddLabel("Arrow outline Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Fov circle color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		circle.Color = Value
+	end,
+})
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
+
+LeftGroupBox:AddToggle("Hitsound", {
+	Text = "Hitsound toggle ",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		getgenv().Settings.Sound = Value
+	end,
+})
+
+LeftGroupBox:AddDropdown("MyDropdown", {
+	Values = { "Skeet", "uwu", "stone", "tf2" },
+	Default = 1, -- number index of the value / string
+	Multi = false, -- true / false, allows multiple choices to be selected
+	Text = "Hitsound",
+	Tooltip = "", -- Information shown when you hover over the dropdown
+	Callback = function(Value)
+		getgenv().Settings.Soundid = sounds[Value]
+	end,
+})
+
+Options.MyDropdown:SetValue("Head")
+
+LeftGroupBox:AddToggle("Jump", {
+	Text = "Jump toggle ",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		getgenv().Settings.Jump = Value
+	end,
+})
+
+LeftGroupBox:AddSlider("Height", {
+	Text = "Jump height",
+	Default = 1,
+	Min = 1,
+	Max = 35,
+	Rounding = 0,
+	Compact = false,
+
 	Callback = function(Value)
 		getgenv().Settings.JumpHeight = Value
 	end,
 })
 
-local Slider = Tabs.Main:AddSlider("Slider", {
-	Title = "Speed",
-	Description = "",
-	Default = 0,
-	Min = 1,
-	Max = 100,
-	Rounding = 0,
+LeftGroupBox:AddToggle("Spedtog", {
+	Text = "Speed toggle ",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
 	Callback = function(Value)
-		_G.speed = Value / 100
+		getgenv().Settings.Spedtog = Value
+		if not getgenv().Settings.Spedtog then
+			_G.speed = 0.01
+		end
 	end,
 })
 
-_G.speed = 0 / 100
+LeftGroupBox:AddSlider("Speed", {
+	Text = "Speed",
+	Default = 1,
+	Min = 1,
+	Max = 100,
+	Rounding = 0,
+	Compact = false,
 
-local Options = Fluent.Options
-local Toggle = Tabs.Misc:AddToggle("fov", { Title = "Fov changer Toggle", Default = false })
+	Callback = function(Value)
+		if getgenv().Settings.Spedtog then
+			_G.speed = Value / 100
+		else
+			_G.speed = 0.01
+		end
+	end,
+})
 
-Toggle:OnChanged(function()
-	getgenv().Settings.Fovchanger.Toggle = Options.fov.Value
-end)
+--misc
+local LeftGroupBox = Tabs.Misc:AddLeftGroupbox("Visual related")
 
-Options.fov:SetValue(false)
+LeftGroupBox:AddToggle("Fov changer", {
+	Text = "Fov changer toggle ",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
 
-local Slider = Tabs.Misc:AddSlider("Slider", {
-	Title = "Fov slider",
-	Description = "Changes fov",
-	Default = 120,
-	Min = 0,
+	Callback = function(Value)
+		getgenv().Settings.Fovchanger.Toggle = Value
+	end,
+})
+
+LeftGroupBox:AddSlider("Speed", {
+	Text = "Fov",
+	Default = 100,
+	Min = 1,
 	Max = 120,
 	Rounding = 0,
+	Compact = false,
+
 	Callback = function(Value)
 		getgenv().Settings.Fovchanger.fov = Value
 	end,
 })
 
-local Toggle = Tabs.Misc:AddToggle("lock", { Title = "Instant lockpick Toggle", Default = false })
 
-Toggle:OnChanged(function()
-	getgenv().Settings.Instantlock = Options.lock.Value
-end)
+LeftGroupBox:AddToggle("Pickup", {
+	Text = "Instant pickup toggle ",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
 
-Options.lock:SetValue(false)
-
-Tabs.Misc:AddButton({
-	Title = "Chatlogger",
-	Description = "Shows chat logs",
-	Callback = function()
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/mac2115/Cool-private/main/ESP"))()
+	Callback = function(Value)
+		getgenv().Settings.InstantPickup = Value
+		pickup()
 	end,
 })
 
-Tabs.Misc:AddButton({
-	Title = "InfStamina",
-	Description = "Makes ur stamina infinite",
-	Callback = function()
-		infstamina()
-	end,
-})
 
-Tabs.Misc:AddButton({
-	Title = "No combat tag",
-	Description = "Enables you to leave whenever you want without losing items",
-	Callback = function()
-		nocombat()
-	end,
-})
-
-Tabs.Misc:AddButton({
-	Title = "No fall damage",
-	Description = "Gets rid of fall damage",
-	Callback = function()
-		nofalldmg()
-	end,
-})
-
-Tabs.Misc:AddButton({
-	Title = "No fog",
-	Description = "Gets rid of fog",
-	Callback = function()
+local MyButton = LeftGroupBox:AddButton({
+	Text = "No fog",
+	Func = function()
 		nofog()
 	end,
+	DoubleClick = false,
+	Tooltip = "",
 })
 
-Tabs.Misc:AddButton({
-	Title = "Full bright",
-	Description = "Makes everything brighter",
-	Callback = function()
+local MyButton = LeftGroupBox:AddButton({
+	Text = "Full bright",
+	Func = function()
 		fullbright()
+	end,
+	DoubleClick = false,
+	Tooltip = "",
+})
+
+local MyButton = LeftGroupBox:AddButton({
+	Text = "Chat logger",
+	Func = function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/mac2115/Cool-private/main/ESP"))()
+	end,
+	DoubleClick = false,
+	Tooltip = "",
+})
+
+local LeftGroupBox = Tabs.Misc:AddLeftGroupbox("Character related")
+
+LeftGroupBox:AddToggle("Instant lock pick", {
+	Text = "Instant lockpick toggle",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		getgenv().Settings.Instantlock = Value
 	end,
 })
 
-local Toggle = Tabs.Visuals:AddToggle("esp", { Title = "ESP Master Toggle", Default = false })
-Toggle:OnChanged(function()
-	esp.options.enabled = Options.esp.Value
-end)
-Options.esp:SetValue(false)
-esp.options.enabled = false
+local MyButton = LeftGroupBox:AddButton({
+	Text = "Inf stamina",
+	Func = function()
+		infstamina()
+	end,
+	DoubleClick = false,
+	Tooltip = "",
+})
 
-local Slider = Tabs.Visuals:AddSlider("Slider", {
-	Title = "Font size ",
-	Description = "",
+local MyButton = LeftGroupBox:AddButton({
+	Text = "No fall damage",
+	Func = function()
+		nofalldmg()
+	end,
+	DoubleClick = false,
+	Tooltip = "",
+})
+
+local LeftGroupBox = Tabs.Visuals:AddLeftGroupbox("Main ESP")
+
+local MyButton = LeftGroupBox:AddButton({
+	Text = "Reload esp",
+	Func = function()
+		esp:Unload()
+		task.wait(0.1)
+		esp:Load()
+	end,
+	DoubleClick = false,
+	Tooltip = "",
+})
+
+LeftGroupBox:AddToggle("ESP Master Toggle", {
+	Text = "ESP toggle",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		esp.options.enabled = Value
+	end,
+})
+
+LeftGroupBox:AddSlider("Font", {
+	Text = "Font size",
 	Default = 13,
 	Min = 1,
 	Max = 25,
 	Rounding = 0,
+	Compact = false,
+
 	Callback = function(Value)
 		esp.options.fontSize = Value
 	end,
 })
-esp.options.fontSize = 13
 
-local Toggle = Tabs.Visuals:AddToggle("arr", { Title = "Offscreen arrows Toggle", Default = false })
-Toggle:OnChanged(function()
-	esp.options.outOfViewArrows = Options.arr.Value
-end)
-Options.arr:SetValue(false)
-esp.options.outOfViewArrows = false
+local LeftGroupBox = Tabs.Visuals:AddLeftGroupbox("Offscreen arrows")
+LeftGroupBox:AddToggle("Offscreen arrows Toggle", {
+	Text = "Offscreen arrows Toggle",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
 
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Arrow outline color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.outOfViewArrowsOutlineColor = Colorpicker.Value
-end)
-
-local Toggle = Tabs.Visuals:AddToggle("dw", { Title = "Filled", Default = false })
-Toggle:OnChanged(function()
-	esp.options.outOfViewArrowsFilled = Options.dw.Value
-end)
-Options.dw:SetValue(false)
-esp.options.outOfViewArrowsFilled = false
-
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Arrow fill color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.outOfViewArrowsColor = Colorpicker.Value
-end)
-
-Colorpicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
-
-local Toggle = Tabs.Visuals:AddToggle("w", { Title = "Names esp", Default = false })
-Toggle:OnChanged(function()
-	esp.options.names = Options.w.Value
-end)
-Options.w:SetValue(false)
-esp.options.names = false
-
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Names color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.nameColor = Colorpicker.Value
-end)
-
-local Toggle = Tabs.Visuals:AddToggle("z", { Title = "Boxes", Default = false })
-Toggle:OnChanged(function()
-	esp.options.boxes = Options.z.Value
-end)
-Options.z:SetValue(false)
-esp.options.boxes = false
-
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Boxes color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.boxesColor = Colorpicker.Value
-end)
-
-local Toggle = Tabs.Visuals:AddToggle("q", { Title = "Filled", Default = false })
-Toggle:OnChanged(function()
-	esp.options.boxFill = Options.q.Value
-end)
-Options.q:SetValue(false)
-esp.options.boxFill = false
-
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Boxes  fill color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.boxFillColor = Colorpicker.Value
-end)
-
-local Toggle = Tabs.Visuals:AddToggle("v", { Title = "Healthbars", Default = false })
-Toggle:OnChanged(function()
-	esp.options.healthBars = Options.v.Value
-end)
-Options.v:SetValue(false)
-esp.options.healthBars = false
-
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Health bar color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.healthBarsColor = Colorpicker.Value
-end)
-
-local Toggle = Tabs.Visuals:AddToggle("bio", { Title = "Health text", Default = false })
-Toggle:OnChanged(function()
-	esp.options.healthText = Options.bio.Value
-end)
-Options.bio:SetValue(false)
-esp.options.healthText = false
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Health text color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.healthTextColor = Colorpicker.Value
-end)
-
-local Toggle = Tabs.Visuals:AddToggle("qe", { Title = "Distance", Default = false })
-Toggle:OnChanged(function()
-	esp.options.distance = Options.qe.Value
-end)
-Options.qe:SetValue(false)
-esp.options.distance = false
-
-esp.options.healthText = false
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Distance color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.distanceColor = Colorpicker.Value
-end)
-
-local Toggle = Tabs.Visuals:AddToggle("dras", { Title = "Chams toggle", Default = false })
-Toggle:OnChanged(function()
-	esp.options.chams = Options.dras.Value
-end)
-Options.dras:SetValue(false)
-
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Chams fill  color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.chamsFillColor = Colorpicker.Value
-end)
-
-local Colorpicker = Tabs.Visuals:AddColorpicker("Colorpicker", {
-	Title = "Chams outline color",
-	Default = Color3.fromRGB(96, 205, 255),
-})
-
-Colorpicker:OnChanged(function()
-	esp.options.chamsOutlineColor = Colorpicker.Value
-end)
-
-Tabs.Settings:AddButton({
-	Title = "Copy discord invite",
-	Description = "Copies the invite to the asteria.lol discord",
-	Callback = function()
-		setclipboard("discord.gg/t2cXFpkGBh")
+	Callback = function(Value)
+		esp.options.outOfViewArrows = Value
 	end,
 })
 
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
+LeftGroupBox:AddLabel("Arrow outline Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Arrow outline color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
 
--- Ignore keys that are used by ThemeManager.
--- (we dont want configs to save themes, do we?)
-SaveManager:IgnoreThemeSettings()
+	Callback = function(Value)
+		esp.options.outOfViewArrowsOutlineColor = Value
+	end,
+})
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
 
--- You can add indexes of elements the save manager should ignore
-SaveManager:SetIgnoreIndexes({})
+LeftGroupBox:AddToggle("Offsc", {
+	Text = "Filled",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
 
--- use case for doing it this way:
--- a script hub could have themes in a global folder
--- and game configs in a separate folder per game
-InterfaceManager:SetFolder("Asteria.lol")
-SaveManager:SetFolder("Asteria.lol/Criminality")
-
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-SaveManager:BuildConfigSection(Tabs.Settings)
-
-Window:SelectTab(1)
-
-Fluent:Notify({
-	Title = "Asteria.lol/Criminality",
-	Content = "The script has been loaded(join our discord)",
-	Duration = 5,
+	Callback = function(Value)
+		esp.options.outOfViewArrowsFilled = Value
+	end,
 })
 
-setupsilent()
-task.spawn(function()
-	RunService.RenderStepped:Connect(function()
-		jumpheight()
-		fovchanger()
-	end)
+LeftGroupBox:AddLabel("Arrows fill Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Arrow fill color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		esp.options.outOfViewArrowsColor = Value
+	end,
+})
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
+local LeftGroupBox = Tabs.Visuals:AddRightGroupbox("Texts")
+
+LeftGroupBox:AddToggle("Offc", {
+	Text = "Names",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		esp.options.names = Value
+	end,
+})
+
+LeftGroupBox:AddLabel("Names Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Names color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		esp.options.nameColor = Value
+	end,
+})
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
+
+LeftGroupBox:AddToggle("Ofsa", {
+	Text = "Health text",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		esp.options.healthText = Value
+	end,
+})
+
+LeftGroupBox:AddLabel("Health text Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Health text Color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		esp.options.healthTextColor = Value
+	end,
+})
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
+
+LeftGroupBox:AddToggle("Ofsa", {
+	Text = "Distance text",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		esp.options.distance = Value
+	end,
+})
+
+LeftGroupBox:AddLabel("Distance text Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Distance text Color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		esp.options.distanceColor = Value
+	end,
+})
+
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
+
+local LeftGroupBox = Tabs.Visuals:AddLeftGroupbox("Boxes settings")
+LeftGroupBox:AddToggle("Offsa", {
+	Text = "Boxes",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		esp.options.boxes = Value
+	end,
+})
+
+LeftGroupBox:AddLabel("Boxes Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Boxes Color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		esp.options.boxesColor = Value
+	end,
+})
+
+LeftGroupBox:AddToggle("Ofsa", {
+	Text = "Filled",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		esp.options.boxFill = Value
+	end,
+})
+
+LeftGroupBox:AddLabel("Boxes fill Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Boxes fill Color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		esp.options.boxFillColor = Value
+	end,
+})
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
+
+LeftGroupBox:AddToggle("Ofsa", {
+	Text = "Health bars",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		esp.options.healthBars = Value
+	end,
+})
+
+LeftGroupBox:AddLabel("Health bar Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Health bar Color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		esp.options.healthBarsColor = Value
+	end,
+})
+
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
+
+local LeftGroupBox = Tabs.Visuals:AddLeftGroupbox("Chams settings")
+LeftGroupBox:AddToggle("Ofsa", {
+	Text = "Chams",
+	Default = false, -- Default value (true / false)
+	Tooltip = "", -- Information shown when you hover over the toggle
+
+	Callback = function(Value)
+		esp.options.chams = Value
+	end,
+})
+LeftGroupBox:AddLabel("Chams fill  Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Chams fill Color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		esp.options.chamsFillColor = Value
+	end,
+})
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
+
+LeftGroupBox:AddLabel("Chams outline Color"):AddColorPicker("ColorPicker", {
+	Default = Color3.new(0, 1, 0), -- Bright green
+	Title = "Chams outline Color", -- Optional. Allows you to have a custom color picker title (when you open it)
+	Transparency = 0, -- Optional. Enables transparency changing for this color picker (leave as nil to disable)
+
+	Callback = function(Value)
+		esp.options.chamsOutlineColor = Value
+	end,
+})
+Options.ColorPicker:SetValueRGB(Color3.fromRGB(0, 255, 140))
+
+Library:SetWatermarkVisibility(false)
+
+-- Example of dynamically-updating watermark with common traits (fps and ping)
+local FrameTimer = tick()
+local FrameCounter = 0
+local FPS = 60
+
+local WatermarkConnection = game:GetService("RunService").RenderStepped:Connect(function()
+	FrameCounter = FrameCounter + 1
+
+	if (tick() - FrameTimer) >= 1 then
+		FPS = FrameCounter
+		FrameTimer = tick()
+		FrameCounter = 0
+	end
+
+	Library:SetWatermark(
+		("Asteria.lol| %s fps | %s ms"):format(
+			math.floor(FPS),
+			math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+		)
+	)
 end)
+
+Library.KeybindFrame.Visible = false -- todo: add a function for this
+
+Library:OnUnload(function()
+	WatermarkConnection:Disconnect()
+
+	print("Unloaded!")
+	Library.Unloaded = true
+end)
+
+-- UI Settings
+local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
+MenuGroup:AddButton("Unload", function()
+	Library:Unload()
+end)
+
+local cButton = MenuGroup:AddButton({
+	Text = "Copy discord link",
+	Func = function()
+		setclipboard("discord.gg/t2cXFpkGBh")
+	end,
+	DoubleClick = false,
+	Tooltip = "",
+})
+
+MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "End", NoUI = true, Text = "Menu keybind" })
+Library.ToggleKeybind = Options.MenuKeybind -- Allows you to have a custom keybind for the menu
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+
+SaveManager:IgnoreThemeSettings()
+
+SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+ThemeManager:SetFolder("Asteria.lol")
+SaveManager:SetFolder("Asteria.lol/Criminality")
+SaveManager:BuildConfigSection(Tabs["UI Settings"])
+ThemeManager:ApplyToTab(Tabs["UI Settings"])
+SaveManager:LoadAutoloadConfig()
+
+--loop stuff
+setupsilent()
 
 task.spawn(function()
 	plr.PlayerGui.ChildAdded:Connect(function(child)
@@ -730,23 +978,34 @@ task.spawn(function()
 		end
 	end)
 end)
-
 task.spawn(function()
 	plr.Character.ChildAdded:Connect(function()
 		setupsilent()
 	end)
 end)
 
+local movementVector
+local moveDirection
+local strafeDirection
+local verticalDirection
+local newPosition
+
 task.spawn(function()
 	RunService.RenderStepped:Connect(function()
-		if plr.Character.Humanoid.Health > 0 then
+		jumpheight()
+		fovchanger()
+		circle.Position = Vector2.new(mouse.X, mouse.Y)
+		circle.Radius = getgenv().Settings.SilentAim.Fov
+		if plr.Character and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
 			movementVector = getvector()
+			moveDirection = plr.Character.HumanoidRootPart.CFrame.LookVector * movementVector.Z
+			strafeDirection = plr.Character.HumanoidRootPart.CFrame.RightVector * movementVector.X
+			verticalDirection = Vector3.new(0, 0, 0) -- No vertical movement
 			plr.Character.HumanoidRootPart.CFrame = plr.Character.HumanoidRootPart.CFrame
-				+ plr.Character.HumanoidRootPart.CFrame.LookVector * movementVector.X
-			plr.Character.HumanoidRootPart.CFrame = plr.Character.HumanoidRootPart.CFrame
-				+ plr.Character.HumanoidRootPart.CFrame.RightVector * movementVector.Z
-				+ plr.Character.HumanoidRootPart.CFrame.RightVector * -movementVector.Z
-			plr.Character.HumanoidRootPart.CFrame = plr.Character.HumanoidRootPart.CFrame
+				+ moveDirection
+				+ strafeDirection
+				+ verticalDirection
 		end
 	end)
 end)
+
